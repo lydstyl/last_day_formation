@@ -1,0 +1,199 @@
+<!doctype html>
+<html>
+<head> 
+<title>HTML5 Video Destruction</title>
+<script>
+Explode = function(o)
+{
+	var fnc = prototype = {
+		/* Function : Initialise la class
+		 * @Param : null
+		 ------------------------------------------------------------------------------------------- */
+		initialize: function(o){
+			// Taille de la tile par défaut avec son centre
+			this.tile = {width:o.tw, height:o.th, center_width:o.tw/2, center_height:o.th/2}
+			
+			// copie de la video dans un canvas pour optimisation
+			this.video = document.getElementById(o.video);
+			this.video_canvas = document.createElement('canvas');
+			this.video_canvas.width = this.video.videoWidth;
+			this.video_canvas.height = this.video.videoHeight;
+			this.video_context = this.video_canvas.getContext('2d');
+
+			this.output.context = document.getElementById(o.output).getContext('2d');
+			this.output.width = document.getElementById(o.output).width;
+			this.output.height = document.getElementById(o.output).height;
+		
+			// creation des tiles
+			this.createTile();
+			
+			// Gestion du click
+			CLASS = this;			
+			document.getElementById(o.output).onmousedown = function(evt){
+				var posx = 0,
+					posy = 0,
+					e = evt || window.event;
+				// suivant les navigateur e.pageX/Y e.clientX/Y seras disponible
+				if(e.pageX || e.pageY){
+					posx = e.pageX;
+					posy = e.pageY;
+				}else if(e.clientX || e.clientY){
+					posx = e.clientX + document.body.scrollLeft + document.documentElement.scrollLeft;
+					posy = e.clientY + document.body.scrollTop + document.documentElement.scrollTop;
+				}
+				
+				// On corrige la position du click, la video n'est pas dans le coin haut / gauche
+				var x = posx-document.getElementById(o.output).offsetLeft;
+				var y = posy-document.getElementById(o.output).offsetTop;
+
+				// Pour chaque tile 
+				for(var i=0; i<CLASS.tiles.length; i++){
+					var tile = CLASS.tiles[i]; // On crée une var pour ne pas accéder à chaque fois au tableau
+					
+					var xdiff = tile.currentX-x; // X corrigé
+					var ydiff = tile.currentY-y; // Y corrigé
+					var dist = Math.sqrt(xdiff*xdiff + ydiff*ydiff); // Distance 2D entre deux points
+					
+					var randRange = 160+(Math.random()*30); // Nombre aléatoire pour la distance d'expulsion
+					var range = randRange-dist;
+					var force = 3*(range/randRange); // Force de la tile
+					if(force > tile.force){
+						tile.force = force;
+						var radians = Math.atan2(ydiff, xdiff);
+						tile.moveX = Math.cos(radians); // Nouvelle position X : COSINUS
+						tile.moveY = Math.sin(radians); // Nouvelle position Y : SINUS
+						tile.moveRotation = 0.5-Math.random(); // Rotation aléatoire
+					}
+				}
+				CLASS.tiles.sort(function(a, b){return (a.force-b.force)}); // On trie les tiles par force
+				CLASS.frame(); // On met à jour la video explosé
+			}
+			return this;
+		},
+		createTile: function(){
+			// Offset du bord X et Y de la video dans le carré blanc
+			var offsetX = this.tile.center_width + (this.output.width - this.video.videoWidth)*0.5;
+			var offsetY = this.tile.center_height + (this.output.height - this.video.videoHeight)*0.5;
+			
+			var y=0;
+			while(y < this.video.videoHeight){
+				var x=0;
+				while(x < this.video.videoWidth){
+					var tile = {
+						videoX: x, // position X réel
+						videoY: y, // position Y réel
+						originX: offsetX+x,  // position X affiché
+						originY: offsetY+y,  // position Y affiché
+						currentX: offsetX+x,   // position X affiché réel
+						currentY: offsetY+y,  // position Y affiché réel
+						rotation:0, // Rotation
+						force:0, // Force
+						z:0, //
+						moveX:0, // Nouvelle pos X
+						moveY:0, // NOuvelle pos Y
+						moveRotation:0, // Nouvelle Rotation
+					}
+					this.tiles.push(tile); // Ajout dans le tableau
+					x += this.tile.width; // On incremente de la largeur d'une tuile
+				}
+				y += this.tile.height; // On increment de la hauteur d'une tuile
+			}
+		},
+		frame: function(){
+			// Si video fini on recommence depuis le début
+			if(this.video.currentTime == this.video.duration){
+				this.video.currentTime = 0;
+			}		
+		
+			// On copie la video dans un canvas caché
+			this.video_context.drawImage(this.video, 0, 0);
+			
+			// On efface se qui se trouve déssiné dans le canvas sur la page
+			this.output.context.clearRect(0, 0, this.output.width, this.output.height);
+	
+			// On trace chaque tile en prenant en compte une rotation et une force
+			for(var i=0, rad=Math.PI/180; i<this.tiles.length; i++){
+				var tile = this.tiles[i];
+
+				if(tile.force > 0.0001){
+					//expand
+					tile.moveX *= tile.force;
+					tile.moveY *= tile.force;
+					tile.moveRotation *= tile.force;
+					tile.currentX += tile.moveX;
+					tile.currentY += tile.moveY;
+					tile.rotation += tile.moveRotation;
+					tile.rotation %= 360;
+					tile.force *= 0.9;
+					if(tile.currentX <= 0 || tile.currentX >= this.output.width){
+						tile.moveX *= -1;
+					}
+					if(tile.currentY <= 0 || tile.currentY >= this.output.height){
+						tile.moveY *= -1;
+					}
+				}else if(tile.rotation != 0 || tile.currentX != tile.originX || tile.currentY != tile.originY){
+					//contract
+					var diffx = (tile.originX-tile.currentX)*0.2;
+					var diffy = (tile.originY-tile.currentY)*0.2;
+					var diffRot = (0-tile.rotation)*0.2;
+					
+					if(Math.abs(diffx) < 0.5){
+						tile.currentX = tile.originX;
+					}else{
+						tile.currentX += diffx;
+					}
+					if(Math.abs(diffy) < 0.5){
+						tile.currentY = tile.originY;
+					}else{
+						tile.currentY += diffy;
+					}
+					if(Math.abs(diffRot) < 0.5){
+						tile.rotation = 0;
+					}else{
+						tile.rotation += diffRot;
+					}
+				}else{
+					tile.force = 0;
+				}
+
+				// Pour chaque tile on sauvegarde le context, transale et fait une rotation avant de déssiner l'image
+				this.output.context.save(); // On sauvegarde le context
+				this.output.context.translate(tile.currentX, tile.currentY); // Translation du context
+				this.output.context.rotate(tile.rotation*rad); // Rotation du context
+				this.output.context.drawImage(this.video_canvas, tile.videoX, tile.videoY, this.tile.width, this.tile.height, -this.tile.center_width, -this.tile.center_height, this.tile.width, this.tile.height);
+				this.output.context.restore(); // On restore le context
+			}
+		},
+		tiles: [], // Tableau de tuile
+		output: { // Affichage de sortie
+			context: null,
+			width: 0,
+			height: 0
+		}
+	}
+	return fnc.initialize(o);
+};
+
+function init(){
+	var explode = new Explode({
+		tw:16, 
+		th:12,
+		video:'sourcevid',
+		output:'output'
+	});
+	setInterval(function(){
+		explode.frame();
+	}, 33);	
+}
+</script>
+</head>
+<body bgcolor="#E0E0E0" onload="init()">
+	<video id="sourcevid" autoplay="true" loop="true" style="display:none;">
+		<source src="BigBuckBunny_640x360.mp4" type="video/mp4">
+		<source src="BigBuckBunny_640x360.ogv" type="video/ogg">
+	</video>
+	<center>
+		<canvas id="output" width="1000" height="600" style="background:#FFFFFF"></canvas>
+	</center>
+</body>
+</html>
